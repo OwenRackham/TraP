@@ -388,7 +388,7 @@ while(my $line = <SAMPLEIDS>){
 		if($DistinctDAcount > 0){
 			my $EpochPercent = 100*$EpochCount/$DistinctDAcount;
 			my $CumulativeEcpochPercent= 100*$CumlativeEpochCount/$DistinctDAcount;
-			print TIMEPERCENTAGES $EpochPercent.":".$CumulativeEcpochPercent."\t";
+			print TIMEPERCENTAGES $CumulativeEcpochPercent."\t";
 		}else{
 			print TIMEPERCENTAGES "0:0\t";
 		}	

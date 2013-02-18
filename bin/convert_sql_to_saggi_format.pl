@@ -9,7 +9,7 @@ use warnings;
 	my %data;
         while(my $line = <FH>){
 	chomp($line);
-        my ($from,$to)=split(/\s+/,$line);
+        my ($from,$to)=split(/\t/,$line);
 	$data{$from}{$to} = 1;
 	}
 
