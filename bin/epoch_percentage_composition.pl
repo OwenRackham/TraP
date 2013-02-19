@@ -111,7 +111,10 @@ use Supfam::Utils qw/:all/;
 use Carp;
 use Carp::Assert;
 use Carp::Assert::More;
+
 use List::Compare;
+use List::Util qw(sum);
+use POSIX qw(ceil);
 
 # Command Line Options
 #-------------------------------------------------------------------------------
@@ -126,6 +129,8 @@ my $removeubiq = 0;
 my $UbiqFuzzyThreshold;
 #The percentage number of samples to hold a comb before we call it is a ubiqutous
 my $source = 1;
+my $out = "../data/EpochSampleGroupPercentages.dat";
+my $summarythreshold = 95;
 
 #Set command line flags and parameters.
 GetOptions("verbose|v!"  => \$verbose,
@@ -137,6 +142,8 @@ GetOptions("verbose|v!"  => \$verbose,
            "removeubiq|r!" => \$removeubiq,
            "ubiqthreshold|u:f" => \$UbiqFuzzyThreshold,
            "source|c:i" => \$source,
+          "output|o:s" => \$out,
+          "summthreshold|t:f" => \$summarythreshold,
         ) or die "Fatal Error: Problem parsing command-line ".$!;
 
 #Get other command line arguments that weren't optional flags.
@@ -157,6 +164,9 @@ if($UbiqFuzzyThreshold){
 }
 
 
+assert_positive($summarythreshold,"Summary threshold must be greater than 0 - a percentage\n");
+assert($summarythreshold <= 100,"Summary threshold must be less than 100 - a percetage\n");
+	
 
 #Print out some help if it was asked for or if no arguments were given.
 pod2usage(-exitstatus => 0, -verbose => 2) if $help;
@@ -212,9 +222,15 @@ assert_defined($samplesfile,"You must procide a file to calculate statistics upo
 open SAMPLEIDS, "<$samplesfile" or die $?."\t".$!;
 
 mkdir("../data");
-open TIMEPERCENTAGES, ">../data/EpochSampleGroupPercentages.dat" or die $!."\t".$?;
+
+print STDOUT "Printing to outfile $out\n";
+
+open TIMEPERCENTAGES, ">$out" or die $!."\t".$?;
 print TIMEPERCENTAGES join("\t",@SortedEpochs);
 print TIMEPERCENTAGES "\n";
+
+open TIMESUMMARY, ">".$out.".sum" or die $!."\t".$?;
+print TIMESUMMARY "0%	5%	25%	50%	75%	95%	100%\n";
 
 $sth = $dbh->prepare("SELECT DISTINCT snapshot_order_comb.sample_id,snapshot_order_comb.comb_id 
 						FROM snapshot_order_comb
@@ -370,10 +386,25 @@ while(my $line = <SAMPLEIDS>){
 		#Finally, uodate the hash
 	}
 	
+	map{assert_in($_,\@SortedEpochs,"Your tax mapping needs to include $_ as at current it is unmapped\n")}keys(%$TaxID2DomArchCountHash);
+	
 	my $CumlativeEpochCount = 0;
 	
 	#Now for the output. For each epoch, print the percentage of our DA set that comes about at that time, alongside the rolling cumulative
 	print TIMEPERCENTAGES $comment."\t";
+
+	my $cent0cutoff = 1;
+	my $cent5cutoff = 5;
+	my $cent25cutoff =25;
+	my $cent50cutoff = 50;
+	my $cent75cutoff = 75;
+	my $cent95cutoff = 95;
+	my $cent100cutoff=100;
+	
+	my $CumulativeFlagThres = 0;
+	
+	print TIMESUMMARY $comment;
+	
 	foreach my $Epoch (@SortedEpochs){
 		
 		my $EpochCount=0;
@@ -388,13 +419,57 @@ while(my $line = <SAMPLEIDS>){
 		if($DistinctDAcount > 0){
 			my $EpochPercent = 100*$EpochCount/$DistinctDAcount;
 			my $CumulativeEcpochPercent= 100*$CumlativeEpochCount/$DistinctDAcount;
-			print TIMEPERCENTAGES $CumulativeEcpochPercent."\t";
+			print TIMEPERCENTAGES $EpochPercent.":".$CumulativeEcpochPercent."\t";
+			
+			if($CumulativeEcpochPercent > $cent0cutoff){
+				print STDERR "Here 0% $CumulativeEcpochPercent !\n" if($verbose);
+				print TIMESUMMARY "\t".$Epoch;
+				$cent0cutoff = 101;#Set an impossible cutoff sothat it will never again be reached
+			}
+			
+			if($CumulativeEcpochPercent > $cent5cutoff){
+				print STDERR "Here 5% $CumulativeEcpochPercent !\n" if($verbose);
+				print TIMESUMMARY "\t".$Epoch;
+				$cent5cutoff = 101;#Set an impossible cutoff sothat it will never again be reached
+			}
+			
+			if($CumulativeEcpochPercent > $cent25cutoff){
+				print STDERR "Here 25% $CumulativeEcpochPercent !\n" if($verbose);
+				print TIMESUMMARY "\t".$Epoch;
+				$cent25cutoff = 101;#Set an impossible cutoff sothat it will never again be reached
+			}
+			
+			if($CumulativeEcpochPercent > $cent50cutoff){
+				print STDERR "Here 50% $CumulativeEcpochPercent !\n" if($verbose);
+				print TIMESUMMARY "\t".$Epoch;
+				$cent50cutoff = 101;#Set an impossible cutoff sothat it will never again be reached
+			}
+			
+			if($CumulativeEcpochPercent > $cent75cutoff){
+				print STDERR "Here 75% $CumulativeEcpochPercent !\n" if($verbose);
+				print TIMESUMMARY "\t".$Epoch;
+				$cent75cutoff = 101;#Set an impossible cutoff sothat it will never again be reached
+			}
+			
+			if($CumulativeEcpochPercent > $cent95cutoff){
+				print STDERR "Here 95% $CumulativeEcpochPercent !\n" if($verbose);
+				print TIMESUMMARY "\t".$Epoch;
+				$cent95cutoff = 101;#Set an impossible cutoff sothat it will never again be reached
+			}
+			
+			if($CumulativeEcpochPercent == $cent100cutoff){
+				print STDERR "Here 100% $CumulativeEcpochPercent !\n" if($verbose);
+				print TIMESUMMARY "\t".$Epoch;
+				$cent100cutoff = 101;#Set an impossible cutoff sothat it will never again be reached
+			}
+			
 		}else{
 			print TIMEPERCENTAGES "0:0\t";
-		}	
+		}
 		
 	}
 	print TIMEPERCENTAGES "\n";
+	print TIMESUMMARY "\n";
 }
 
 close SAMPLEIDS;
